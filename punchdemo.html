@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Punch Card Organizer (Local Build for Demo)</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin-top: 30px; }
+    #taskList { margin-top: 20px; }
+    input, button { margin: 5px; padding: 8px; }
+    .task-item { margin: 10px 0; }
+    .task-item button { margin-left: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Your Punch Card Tasks</h1>
+
+  <div>
+    <input type="text" id="projectInput" placeholder="Project Name">
+    <input type="text" id="taskInput" placeholder="Task Name">
+    <button onclick="addTask()">Add Task</button>
+    <button onclick="deleteProject()">Delete Project</button>
+  </div>
+
+  <div id="taskList"></div>
+
+  <script>
+    function loadTasks() {
+      const tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+      displayTasks(tasks);
+    }
+
+    function displayTasks(tasks) {
+      const taskListDiv = document.getElementById('taskList');
+      taskListDiv.innerHTML = '';
+
+      //Tasks are grouped within project
+      const projects = {};
+      tasks.forEach(task => {
+        if (!projects[task.projectName]) {
+          projects[task.projectName] = [];
+        }
+        projects[task.projectName].push(task);
+      });
+
+      //Display projects/tasks as assigned to one another
+      for (const project in projects) {
+        const projectHeader = document.createElement('h2');
+        projectHeader.textContent = project;
+        taskListDiv.appendChild(projectHeader);
+
+        projects[project].forEach((task, index) => {
+          const div = document.createElement('div');
+          div.className = 'task-item';
+          div.textContent = task.taskName;
+
+          const deleteButton = document.createElement('button');
+          deleteButton.textContent = 'Delete';
+          deleteButton.onclick = () => deleteTask(task.projectName, task.taskName);
+
+          div.appendChild(deleteButton);
+          taskListDiv.appendChild(div);
+        });
+      }
+    }
+
+    function addTask() {
+      const projectName = document.getElementById('projectInput').value.trim();
+      const taskName = document.getElementById('taskInput').value.trim();
+      if (!projectName || !taskName) {
+        alert('Please enter both project and task names.');
+        return;
+      }
+
+      const newTask = { projectName, taskName };
+      const tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+      tasks.push(newTask);
+      localStorage.setItem('tasks', JSON.stringify(tasks));
+
+      loadTasks();
+      document.getElementById('projectInput').value = '';
+      document.getElementById('taskInput').value = '';
+    }
+
+    function deleteTask(projectName, taskName) {
+      let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+      tasks = tasks.filter(task => !(task.projectName === projectName && task.taskName === taskName));
+      localStorage.setItem('tasks', JSON.stringify(tasks));
+      loadTasks();
+    }
+
+    function deleteProject() {
+      const projectName = document.getElementById('projectInput').value.trim();
+      if (!projectName) {
+        alert('Please enter a project name to delete.');
+        return;
+      }
+
+      let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+      tasks = tasks.filter(task => task.projectName !== projectName);
+      localStorage.setItem('tasks', JSON.stringify(tasks));
+      loadTasks();
+
+      document.getElementById('projectInput').value = '';
+    }
+
+    window.onload = loadTasks;
+  </script>
+</body>
+</html>

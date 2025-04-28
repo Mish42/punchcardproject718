@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Punch Card Organizer</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin-top: 30px; }
+    #taskList { margin-top: 20px; }
+    input, button { margin: 5px; padding: 8px; }
+    .task-item { margin: 10px 0; }
+    .task-item button { margin-left: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Your Punch Card Tasks</h1>
+
+  <div>
+    <input type="text" id="projectInput" placeholder="Project Name">
+    <input type="text" id="taskInput" placeholder="Task Name">
+    <button onclick="addTask()">Add Task</button>
+    <button onclick="deleteProject()">Delete Project</button>
+  </div>
+
+  <div id="taskList"></div>
+
+  <script>
+    const apiBaseUrl = 'https://jy3w8ux8xi.execute-api.us-east-2.amazonaws.com/prod';
+
+    async function loadTasks() {
+      try {
+        const response = await fetch(`${apiBaseUrl}/tasks`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('id_token')}`
+          }
+        });
+        const tasks = await response.json();
+        displayTasks(tasks);
+      } catch (error) {
+        console.error('Error loading tasks:', error);
+      }
+    }
+
+    function displayTasks(tasks) {
+      const taskListDiv = document.getElementById('taskList');
+      taskListDiv.innerHTML = '';
+
+      const projects = {};
+      tasks.forEach(task => {
+        if (!projects[task.projectId]) {
+          projects[task.projectId] = { projectDesc: task.projectDesc, tasks: [] };
+        }
+        projects[task.projectId].tasks.push(task);
+      });
+
+      for (const projectId in projects) {
+        const projectHeader = document.createElement('h2');
+        projectHeader.textContent = projects[projectId].projectDesc;
+        taskListDiv.appendChild(projectHeader);
+
+        projects[projectId].tasks.forEach(task => {
+          const div = document.createElement('div');
+          div.className = 'task-item';
+          div.textContent = task.taskDesc;
+
+          const deleteButton = document.createElement('button');
+          deleteButton.textContent = 'Delete';
+          deleteButton.onclick = () => deleteTask(task.projectId, task.taskId);
+
+          div.appendChild(deleteButton);
+          taskListDiv.appendChild(div);
+        });
+      }
+    }
+
+    async function addTask() {
+      const projectName = document.getElementById('projectInput').value.trim();
+      const taskName = document.getElementById('taskInput').value.trim();
+      if (!projectName || !taskName) {
+        alert('Please enter both project and task names.');
+        return;
+      }
+
+      const newTask = {
+        projectId: projectName.replace(/\s+/g, '-').toLowerCase(),
+        projectDesc: projectName,
+        taskId: Date.now().toString(),
+        taskDesc: taskName
+      };
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/tasks`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('id_token')}`
+          },
+          body: JSON.stringify(newTask)
+        });
+
+        if (response.ok) {
+          loadTasks();
+          document.getElementById('projectInput').value = '';
+          document.getElementById('taskInput').value = '';
+        } else {
+          console.error('Failed to add task');
+        }
+      } catch (error) {
+        console.error('Error adding task:', error);
+      }
+    }
+
+    async function deleteTask(projectId, taskId) {
+      try {
+        const response = await fetch(`${apiBaseUrl}/tasks`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('id_token')}`
+          },
+          body: JSON.stringify({ projectId, taskId })
+        });
+
+        if (response.ok) {
+          loadTasks();
+        } else {
+          console.error('Failed to delete task');
+        }
+      } catch (error) {
+        console.error('Error deleting task:', error);
+      }
+    }
+
+    async function deleteProject() {
+      const projectName = document.getElementById('projectInput').value.trim();
+      if (!projectName) {
+        alert('Please enter a project name to delete.');
+        return;
+      }
+
+      const projectId = projectName.replace(/\s+/g, '-').toLowerCase();
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/projects`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('id_token')}`
+          },
+          body: JSON.stringify({ projectId })
+        });
+
+        if (response.ok) {
+          loadTasks();
+          document.getElementById('projectInput').value = '';
+        } else {
+          console.error('Failed to delete project');
+        }
+      } catch (error) {
+        console.error('Error deleting project:', error);
+      }
+    }
+
+    window.onload = loadTasks;
+  </script>
+</body>
+</html>

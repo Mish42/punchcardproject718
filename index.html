@@ -1,0 +1,36 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Login - My Projects</title>
+  <!-- Google Sign-In JS Lib -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin-top: 50px; }
+    #g_id_onload { display: inline-block; }
+  </style>
+</head>
+<body>
+  <h1>Welcome to the Punch Card Organizer</h1>
+  <p>Please sign in with Google to continue.</p>
+
+  <!-- Google Sign-In Container -->
+  <div id="g_id_onload"
+       data-client_id="743162379253-7kjsr31h8tojhk38ng1ne8gqk60lt7io.apps.googleusercontent.com"
+       data-callback="handleCredentialResponse"
+       data-auto_prompt="false">
+  </div>
+  <div class="g_id_signin" data-type="standard"></div>
+
+  <script>
+    function handleCredentialResponse(response) {
+      const idToken = response.credential;
+      //Google ID token storage
+      localStorage.setItem('id_token', idToken);
+      //successful sign-in redirect
+      window.location.href = 'punch.html';
+    }
+  </script>
+</body>
+</html>

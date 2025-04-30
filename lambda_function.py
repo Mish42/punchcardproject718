@@ -95,7 +95,7 @@ def lambda_handler(event, context):
                     'body': json.dumps({'message': 'Project ID is required'})
                 }
 
-            # Delete entire project (all items with same userId and projectId)
+            # DOES NOT WORK PROPERLY - intended to delete entire queried project at once
             if not task_desc:
                 response = table.query(
                     KeyConditionExpression=Key('userId').eq(user_id) & Key('projectId').eq(project_id)
@@ -111,7 +111,7 @@ def lambda_handler(event, context):
                     'body': json.dumps({'message': 'Project deleted'})
                 }
 
-            # Delete a specific task from the project by matching taskDesc
+            # DOES NOT WORK PROPERLY - intended to delete task from project 
             response = table.query(
                 KeyConditionExpression=Key('userId').eq(user_id) & Key('projectId').eq(project_id)
             )

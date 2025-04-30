@@ -49,11 +49,11 @@ def lambda_handler(event, context):
             response = table.query(
                 KeyConditionExpression=Key('userId').eq(user_id)
             )
-            projects = response.get('Items', [])
+            tasks = response.get('Items', [])
             return {
                 'statusCode': 200,
                 'headers': cors_headers,
-                'body': json.dumps(projects)
+                'body': json.dumps(tasks)
             }
 
         elif method == 'POST':
@@ -67,21 +67,21 @@ def lambda_handler(event, context):
                 return {
                     'statusCode': 400,
                     'headers': cors_headers,
-                    'body': json.dumps({'message': 'Project and task are required'})
+                    'body': json.dumps({'message': 'All task and project fields are required'})
                 }
 
             table.put_item(Item={
                 'userId': user_id,
+                'taskId': task_id,
                 'projectId': project_id,
                 'projectDesc': project_desc,
-                'taskId': task_id,
                 'taskDesc': task_desc
             })
 
             return {
                 'statusCode': 200,
                 'headers': cors_headers,
-                'body': json.dumps({'message': 'Project and task added'})
+                'body': json.dumps({'message': 'Task added'})
             }
 
         elif method == 'DELETE':
@@ -96,45 +96,56 @@ def lambda_handler(event, context):
                     'body': json.dumps({'message': 'Project ID is required'})
                 }
 
+            # Fetch all tasks for this user
+            response = table.query(
+                KeyConditionExpression=Key('userId').eq(user_id)
+            )
+            items = response.get('Items', [])
+
             if task_id:
-                # Delete a specific task within a project
-                response = table.query(
-                    KeyConditionExpression=Key('userId').eq(user_id) & Key('projectId').eq(project_id)
-                )
-                deleted = False
-                for item in response.get('Items', []):
-                    if str(item.get('taskId')) == str(task_id):
-                        table.delete_item(
-                            Key={
-                                'userId': item['userId'],
-                                'projectId': item['projectId']
-                            }
-                        )
-                        deleted = True
-                        break
+                # Delete a single task with matching taskId and projectId
+                matching_tasks = [
+                    item for item in items
+                    if item.get('projectId') == project_id and str(item.get('taskId')) == str(task_id)
+                ]
 
-                return {
-                    'statusCode': 200 if deleted else 404,
-                    'headers': cors_headers,
-                    'body': json.dumps({'message': 'Task deleted' if deleted else 'Task not found'})
-                }
+                if not matching_tasks:
+                    return {
+                        'statusCode': 404,
+                        'headers': cors_headers,
+                        'body': json.dumps({'message': 'Task not found'})
+                    }
 
-            else:
-                # Delete entire project and all its tasks
-                response = table.query(
-                    KeyConditionExpression=Key('userId').eq(user_id) & Key('projectId').eq(project_id)
+                table.delete_item(
+                    Key={
+                        'userId': user_id,
+                        'taskId': task_id
+                    }
                 )
-                for item in response.get('Items', []):
-                    table.delete_item(
-                        Key={
-                            'userId': item['userId'],
-                            'projectId': item['projectId']
-                        }
-                    )
+
                 return {
                     'statusCode': 200,
                     'headers': cors_headers,
-                    'body': json.dumps({'message': 'Project and all tasks deleted'})
+                    'body': json.dumps({'message': 'Task deleted successfully'})
+                }
+
+            else:
+                # Delete all tasks under the project
+                deleted_count = 0
+                for item in items:
+                    if item.get('projectId') == project_id:
+                        table.delete_item(
+                            Key={
+                                'userId': user_id,
+                                'taskId': item['taskId']
+                            }
+                        )
+                        deleted_count += 1
+
+                return {
+                    'statusCode': 200,
+                    'headers': cors_headers,
+                    'body': json.dumps({'message': f'{deleted_count} task(s) deleted from project'})
                 }
 
         else:

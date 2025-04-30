@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -26,9 +25,8 @@
   <script>
     function handleCredentialResponse(response) {
       const idToken = response.credential;
-      //Google ID token storage
+      // Store the token using the expected key
       localStorage.setItem('id_token', idToken);
-      //successful sign-in redirect
       window.location.href = 'punch.html';
     }
   </script>

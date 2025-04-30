@@ -1,38 +1,40 @@
 import json
 import boto3
 import uuid
-import urllib.request
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
-# I was unable to get Lambda to work, for full transparency. The following is the attempt I had made to authenticate through google OAuth and then process user-specific project creation/deletion tasks
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table('Projects')
 
 def lambda_handler(event, context):
-    # Extract authorization header from incoming event
     headers = event.get('headers', {})
     auth_header = headers.get('Authorization', '')
 
-    # Checking authorization header
+    cors_headers = {
+        'Access-Control-Allow-Origin': 'https://d1qgw2khdxi3ij.cloudfront.net',
+        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization'
+    }
+
     if not auth_header.startswith('Bearer '):
         return {
             'statusCode': 401,
-            'body': json.dumps({'message': 'Unauthorized'})
+            'headers': cors_headers,
+            'body': json.dumps({'message': 'Missing or invalid Authorization header'})
         }
 
-    # Extract the token from header
     token = auth_header.split(' ')[1]
-    token_url = f"https://oauth2.googleapis.com/tokeninfo?id_token={token}"
 
     try:
-        # Validate token by calling Google's token info endpoint
-        response = urllib.request.urlopen(token_url)
-        data = json.load(response)
+        request_adapter = requests.Request()
+        data = id_token.verify_oauth2_token(
+            token,
+            request_adapter,
+            '743162379253-7kjsr31h8tojhk38ng1ne8gqk60lt7io.apps.googleusercontent.com'
+        )
 
-        if data.get('aud') != '743162379253-7kjsr31h8tojhk38ng1ne8gqk60lt7io.apps.googleusercontent.com':
-            raise Exception("Invalid token audience")
-
-        user_id = data.get('sub')  # Google unique user ID
-
+        user_id = data.get('sub')
         method = event['httpMethod']
 
         if method == 'GET':
@@ -42,40 +44,53 @@ def lambda_handler(event, context):
             projects = response.get('Items', [])
             return {
                 'statusCode': 200,
+                'headers': cors_headers,
                 'body': json.dumps(projects)
             }
 
         elif method == 'POST':
-            body = json.loads(event.get('body', '{}'))
-            project_name = body.get('name')
+            # Debug print to CloudWatch to inspect incoming data
+            print("Event body:", event.get('body'))
 
-            if not project_name:
+            body = json.loads(event.get('body', '{}'))
+            project_id = body.get('projectId')
+            project_desc = body.get('projectDesc')
+            task_id = body.get('taskId')
+            task_desc = body.get('taskDesc')
+
+            if not all([project_id, project_desc, task_id, task_desc]):
                 return {
                     'statusCode': 400,
-                    'body': json.dumps({'message': 'Project name required'})
+                    'headers': cors_headers,
+                    'body': json.dumps({'message': 'Project and task are required'})
                 }
-
-            project_id = str(uuid.uuid4())
 
             table.put_item(Item={
                 'userId': user_id,
                 'projectId': project_id,
-                'name': project_name
+                'projectDesc': project_desc,
+                'taskId': task_id,
+                'taskDesc': task_desc
             })
 
             return {
                 'statusCode': 200,
-                'body': json.dumps({'message': 'Project added'})
+                'headers': cors_headers,
+                'body': json.dumps({'message': 'Project and task added'})
             }
 
         else:
             return {
                 'statusCode': 405,
+                'headers': cors_headers,
                 'body': json.dumps({'message': 'Method Not Allowed'})
             }
 
     except Exception as e:
+        print("Exception occurred:", str(e))
         return {
-            'statusCode': 401,
-            'body': json.dumps({'message': 'Invalid token', 'error': str(e)})
+            'statusCode': 500,
+            'headers': cors_headers,
+            'body': json.dumps({'message': 'Internal server error', 'error': str(e)})
         }
+

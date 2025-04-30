@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,11 +31,13 @@
       try {
         const response = await fetch(`${apiBaseUrl}/tasks`, {
           method: 'GET',
+          mode: 'cors',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('id_token')}`
           }
         });
         const tasks = await response.json();
+        console.log("Loaded tasks:", tasks);
         displayTasks(tasks);
       } catch (error) {
         console.error('Error loading tasks:', error);
@@ -46,6 +49,11 @@
       taskListDiv.innerHTML = '';
 
       const projects = {};
+      if (!Array.isArray(tasks)) {
+        console.error("Unexpected response format:", tasks);
+        return;
+      }
+
       tasks.forEach(task => {
         if (!projects[task.projectId]) {
           projects[task.projectId] = { projectDesc: task.projectDesc, tasks: [] };
@@ -91,6 +99,7 @@
       try {
         const response = await fetch(`${apiBaseUrl}/tasks`, {
           method: 'POST',
+          mode: 'cors',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('id_token')}`
@@ -114,6 +123,7 @@
       try {
         const response = await fetch(`${apiBaseUrl}/tasks`, {
           method: 'DELETE',
+          mode: 'cors',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('id_token')}`
@@ -141,8 +151,9 @@
       const projectId = projectName.replace(/\s+/g, '-').toLowerCase();
 
       try {
-        const response = await fetch(`${apiBaseUrl}/projects`, {
+        const response = await fetch(`${apiBaseUrl}/tasks`, {
           method: 'DELETE',
+          mode: 'cors',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('id_token')}`

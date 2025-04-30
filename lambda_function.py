@@ -38,6 +38,13 @@ def lambda_handler(event, context):
         user_id = data.get('sub')
         method = event['httpMethod']
 
+        if method == 'OPTIONS':
+            return {
+                'statusCode': 200,
+                'headers': cors_headers,
+                'body': json.dumps({'message': 'CORS preflight OK'})
+            }
+
         if method == 'GET':
             response = table.query(
                 KeyConditionExpression=Key('userId').eq(user_id)
@@ -80,26 +87,55 @@ def lambda_handler(event, context):
         elif method == 'DELETE':
             body = json.loads(event.get('body', '{}'))
             project_id = body.get('projectId')
+            task_id = body.get('taskId')
 
             if not project_id:
                 return {
                     'statusCode': 400,
                     'headers': cors_headers,
-                    'body': json.dumps({'message': 'Project ID required for deletion'})
+                    'body': json.dumps({'message': 'Project ID is required'})
                 }
 
-            table.delete_item(
-                Key={
-                    'userId': user_id,
-                    'projectId': project_id
-                }
-            )
+            if task_id:
+                # Delete a specific task within a project
+                response = table.query(
+                    KeyConditionExpression=Key('userId').eq(user_id) & Key('projectId').eq(project_id)
+                )
+                deleted = False
+                for item in response.get('Items', []):
+                    if str(item.get('taskId')) == str(task_id):
+                        table.delete_item(
+                            Key={
+                                'userId': item['userId'],
+                                'projectId': item['projectId']
+                            }
+                        )
+                        deleted = True
+                        break
 
-            return {
-                'statusCode': 200,
-                'headers': cors_headers,
-                'body': json.dumps({'message': 'Project deleted'})
-            }
+                return {
+                    'statusCode': 200 if deleted else 404,
+                    'headers': cors_headers,
+                    'body': json.dumps({'message': 'Task deleted' if deleted else 'Task not found'})
+                }
+
+            else:
+                # Delete entire project and all its tasks
+                response = table.query(
+                    KeyConditionExpression=Key('userId').eq(user_id) & Key('projectId').eq(project_id)
+                )
+                for item in response.get('Items', []):
+                    table.delete_item(
+                        Key={
+                            'userId': item['userId'],
+                            'projectId': item['projectId']
+                        }
+                    )
+                return {
+                    'statusCode': 200,
+                    'headers': cors_headers,
+                    'body': json.dumps({'message': 'Project and all tasks deleted'})
+                }
 
         else:
             return {

@@ -3,6 +3,7 @@ import boto3
 import uuid
 from google.oauth2 import id_token
 from google.auth.transport import requests
+from boto3.dynamodb.conditions import Key
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table('Projects')
@@ -39,7 +40,7 @@ def lambda_handler(event, context):
 
         if method == 'GET':
             response = table.query(
-                KeyConditionExpression=boto3.dynamodb.conditions.Key('userId').eq(user_id)
+                KeyConditionExpression=Key('userId').eq(user_id)
             )
             projects = response.get('Items', [])
             return {
@@ -49,9 +50,6 @@ def lambda_handler(event, context):
             }
 
         elif method == 'POST':
-            # Debug print to CloudWatch to inspect incoming data
-            print("Event body:", event.get('body'))
-
             body = json.loads(event.get('body', '{}'))
             project_id = body.get('projectId')
             project_desc = body.get('projectDesc')
@@ -79,6 +77,30 @@ def lambda_handler(event, context):
                 'body': json.dumps({'message': 'Project and task added'})
             }
 
+        elif method == 'DELETE':
+            body = json.loads(event.get('body', '{}'))
+            project_id = body.get('projectId')
+
+            if not project_id:
+                return {
+                    'statusCode': 400,
+                    'headers': cors_headers,
+                    'body': json.dumps({'message': 'Project ID required for deletion'})
+                }
+
+            table.delete_item(
+                Key={
+                    'userId': user_id,
+                    'projectId': project_id
+                }
+            )
+
+            return {
+                'statusCode': 200,
+                'headers': cors_headers,
+                'body': json.dumps({'message': 'Project deleted'})
+            }
+
         else:
             return {
                 'statusCode': 405,
@@ -93,4 +115,3 @@ def lambda_handler(event, context):
             'headers': cors_headers,
             'body': json.dumps({'message': 'Internal server error', 'error': str(e)})
         }
-

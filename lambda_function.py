@@ -1,9 +1,9 @@
 import json
 import boto3
 import uuid
+from boto3.dynamodb.conditions import Key
 from google.oauth2 import id_token
 from google.auth.transport import requests
-from boto3.dynamodb.conditions import Key
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table('Projects')
@@ -42,40 +42,39 @@ def lambda_handler(event, context):
             return {
                 'statusCode': 200,
                 'headers': cors_headers,
-                'body': json.dumps({'message': 'CORS preflight OK'})
+                'body': json.dumps({'message': 'CORS preflight'})
             }
 
         if method == 'GET':
             response = table.query(
                 KeyConditionExpression=Key('userId').eq(user_id)
             )
-            tasks = response.get('Items', [])
             return {
                 'statusCode': 200,
                 'headers': cors_headers,
-                'body': json.dumps(tasks)
+                'body': json.dumps(response.get('Items', []))
             }
 
         elif method == 'POST':
             body = json.loads(event.get('body', '{}'))
             project_id = body.get('projectId')
             project_desc = body.get('projectDesc')
-            task_id = body.get('taskId')
             task_desc = body.get('taskDesc')
 
-            if not all([project_id, project_desc, task_id, task_desc]):
+            if not project_id or not project_desc or not task_desc:
                 return {
                     'statusCode': 400,
                     'headers': cors_headers,
-                    'body': json.dumps({'message': 'All task and project fields are required'})
+                    'body': json.dumps({'message': 'Project ID, project description, and task description are required'})
                 }
 
+            task_id = str(uuid.uuid4().int)[:10]
             table.put_item(Item={
                 'userId': user_id,
-                'taskId': task_id,
                 'projectId': project_id,
                 'projectDesc': project_desc,
-                'taskDesc': task_desc
+                'taskDesc': task_desc,
+                'taskId': task_id
             })
 
             return {
@@ -87,7 +86,7 @@ def lambda_handler(event, context):
         elif method == 'DELETE':
             body = json.loads(event.get('body', '{}'))
             project_id = body.get('projectId')
-            task_id = body.get('taskId')
+            task_desc = body.get('taskDesc')
 
             if not project_id:
                 return {
@@ -96,57 +95,39 @@ def lambda_handler(event, context):
                     'body': json.dumps({'message': 'Project ID is required'})
                 }
 
-            # Fetch all tasks for this user
-            response = table.query(
-                KeyConditionExpression=Key('userId').eq(user_id)
-            )
-            items = response.get('Items', [])
-
-            if task_id:
-                # Delete a single task with matching taskId and projectId
-                matching_tasks = [
-                    item for item in items
-                    if item.get('projectId') == project_id and str(item.get('taskId')) == str(task_id)
-                ]
-
-                if not matching_tasks:
-                    return {
-                        'statusCode': 404,
-                        'headers': cors_headers,
-                        'body': json.dumps({'message': 'Task not found'})
-                    }
-
-                table.delete_item(
-                    Key={
-                        'userId': user_id,
-                        'taskId': task_id
-                    }
+            # Delete entire project (all items with same userId and projectId)
+            if not task_desc:
+                response = table.query(
+                    KeyConditionExpression=Key('userId').eq(user_id) & Key('projectId').eq(project_id)
                 )
-
+                for item in response.get('Items', []):
+                    table.delete_item(Key={
+                        'userId': item['userId'],
+                        'projectId': item['projectId']
+                    })
                 return {
                     'statusCode': 200,
                     'headers': cors_headers,
-                    'body': json.dumps({'message': 'Task deleted successfully'})
+                    'body': json.dumps({'message': 'Project deleted'})
                 }
 
-            else:
-                # Delete all tasks under the project
-                deleted_count = 0
-                for item in items:
-                    if item.get('projectId') == project_id:
-                        table.delete_item(
-                            Key={
-                                'userId': user_id,
-                                'taskId': item['taskId']
-                            }
-                        )
-                        deleted_count += 1
+            # Delete a specific task from the project by matching taskDesc
+            response = table.query(
+                KeyConditionExpression=Key('userId').eq(user_id) & Key('projectId').eq(project_id)
+            )
+            for item in response.get('Items', []):
+                if item.get('taskDesc') == task_desc:
+                    table.delete_item(Key={
+                        'userId': item['userId'],
+                        'projectId': item['projectId']
+                    })
+                    break
 
-                return {
-                    'statusCode': 200,
-                    'headers': cors_headers,
-                    'body': json.dumps({'message': f'{deleted_count} task(s) deleted from project'})
-                }
+            return {
+                'statusCode': 200,
+                'headers': cors_headers,
+                'body': json.dumps({'message': 'Task deleted (if matched)'})
+            }
 
         else:
             return {
@@ -156,7 +137,6 @@ def lambda_handler(event, context):
             }
 
     except Exception as e:
-        print("Exception occurred:", str(e))
         return {
             'statusCode': 500,
             'headers': cors_headers,
